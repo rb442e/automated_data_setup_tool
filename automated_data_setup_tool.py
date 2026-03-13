@@ -29,7 +29,7 @@ MEMBER_DATA_TABLES = [
     {"schema": "incentives", "table": "incentives_transaction_summary", "id_column": "primary_member_plan_id", "operation": "DELETE"},
     {"schema": "incentives", "table": "incentives_transaction", "id_column": "primary_member_plan_id", "operation": "DELETE"},
     {"schema": "digital_journey", "table": "member_content_transaction", "id_column": "member_plan_id", "operation": "DELETE"},
-    {"schema": "digital_journey", "table": "hra_member_category_status", "id_column": "member_plan_id", "operation": "UPDATE", "update_set": "status_id = 3"},
+    {"schema": "digital_journey", "table": "hra_member_category_status", "id_column": "member_plan_id", "operation": "DELETE"},
 ]
 
 HRA_DATA_TABLES = [
@@ -39,7 +39,13 @@ HRA_DATA_TABLES = [
     {"schema": "member_clinical_data", "table": "member_assessment_header", "id_column": "primary_member_plan_id", "operation": "DELETE"},
 ]
 
-for key in ("digg_preview", "mbr_preview", "digg_preview_err", "mbr_preview_err",
+REGISTRATION_DATA_TABLES = [
+    {"schema": "digital_journey", "table": "user_registration", "id_column": "member_plan_id", "operation": "DELETE"},
+    {"schema": "digital_journey", "table": "user_profile", "id_column": "member_plan_id", "operation": "DELETE"},
+]
+
+for key in ("digg_preview", "mbr_preview",
+             "digg_preview_err", "mbr_preview_err",
              "digg_status", "mbr_status"):
     if key not in st.session_state:
         st.session_state[key] = None
@@ -347,7 +353,11 @@ if member_id_str:
 else:
     member_id = None
 
-tab1, tab2, tab3 = st.tabs(["PREVIEW", "RESET MEMBER DATA", "RESET HRA / CLINICAL"])
+if member_id is None:
+    for key in ("digg_preview", "mbr_preview", "digg_preview_err", "mbr_preview_err"):
+        st.session_state[key] = None
+
+tab1, tab2, tab3, tab4 = st.tabs(["PREVIEW", "RESET MEMBER DATA", "RESET HRA / CLINICAL", "REGISTRATION RESET"])
 
 # ── Tab 1: Preview ────────────────────────────────────────────────────────────
 with tab1:
@@ -360,7 +370,7 @@ with tab1:
     )
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown('<div class="panel-hdr">DIGG &mdash; Member Data</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-hdr">DIGG &mdash; Member &amp; Registration Data</div>', unsafe_allow_html=True)
         btn_sel_digg = st.button("Query DIGG", key="sel_member", disabled=member_id is None)
     with c2:
         st.markdown('<div class="panel-hdr">MBR &mdash; HRA / Clinical</div>', unsafe_allow_html=True)
@@ -368,7 +378,9 @@ with tab1:
 
     if btn_sel_digg and member_id:
         try:
-            st.session_state.digg_preview = fetch_preview(MEMBER_DATA_TABLES, member_id, DB_CONFIG_DIGG)
+            member_rows = fetch_preview(MEMBER_DATA_TABLES, member_id, DB_CONFIG_DIGG)
+            reg_rows = fetch_preview(REGISTRATION_DATA_TABLES, member_id, DB_CONFIG_DIGG)
+            st.session_state.digg_preview = member_rows + reg_rows
             st.session_state.digg_preview_err = None
         except Exception as e:
             st.session_state.digg_preview = None
@@ -425,6 +437,22 @@ with tab3:
     if btn_reset_hra and member_id:
         with st.spinner("Resetting..."):
             execute_script(HRA_DATA_TABLES, member_id, "Reset HRA Data", reset_hra_box, DB_CONFIG_MBR)
+
+# ── Tab 4: Registration Reset ─────────────────────────────────────────────────
+with tab4:
+    st.markdown(
+        '<div class="section-card">'
+        "<h4>Registration Reset</h4>"
+        "<p>DELETE from <b>digital_journey.user_registration</b> &amp; <b>digital_journey.user_profile</b>.</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.warning("This permanently modifies data. Verify the Member Plan ID.", icon="⚠️")
+    btn_reset_reg = st.button("Execute Reset", key="reset_reg", type="primary", disabled=member_id is None)
+    reset_reg_box = st.container()
+    if btn_reset_reg and member_id:
+        with st.spinner("Resetting registration data..."):
+            execute_script(REGISTRATION_DATA_TABLES, member_id, "Reset Registration Data", reset_reg_box, DB_CONFIG_DIGG)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
